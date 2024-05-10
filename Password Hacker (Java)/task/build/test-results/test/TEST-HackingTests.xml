@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="HackingTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2024-04-27T00:00:05" hostname="ACLOSECUSTOMPC" time="0.191">
+  <properties/>
+  <testcase name="start" classname="HackingTests" time="0.191"/>
+  <system-out><![CDATA[?[1;31m
+Start test 1?[0m
+Wrong password!
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

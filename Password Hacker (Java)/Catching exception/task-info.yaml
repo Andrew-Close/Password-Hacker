@@ -1,0 +1,281 @@
+type: edu
+files:
+  - name: src/hacker/Main.java
+    visible: true
+    text: |
+      package hacker;
+      
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println("Hello, world!");
+          }
+      }
+    learner_created: false
+  - name: test/HackingTests.java
+    visible: false
+    text: |-
+      import com.google.gson.Gson;
+      import com.google.gson.JsonElement;
+      import com.google.gson.JsonObject;
+      import org.hyperskill.hstest.stage.StageTest;
+      import org.hyperskill.hstest.testcase.CheckResult;
+      import org.hyperskill.hstest.testcase.TestCase;
+      
+      import java.io.IOException;
+      import java.util.List;
+      import java.util.Random;
+      
+      
+      public class HackingTests extends StageTest {
+        String abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+        boolean ready = false;
+        ServerHack serverHack = null;
+        Thread serverThread = null;
+        String password = null;
+        String login = null;
+      
+        String randomLogin() {
+          String[] logins = new String[]{
+                  "admin", "Admin", "admin1", "admin2", "admin3",
+                  "user1", "user2", "root", "default", "new_user",
+                  "some_user", "new_admin", "administrator",
+                  "Administrator", "superuser", "super", "su", "alex",
+                  "suser", "rootuser", "adminadmin", "useruser",
+                  "superadmin", "username", "username1"
+          };
+          Random ran = new Random();
+          return logins[ran.nextInt(logins.length)];
+        }
+      
+        String randomPassword() {
+          Random ran = new Random();
+          int length = ran.nextInt(5) + 6;
+          String ret = "";
+          for (int i = 0; i < length; i++) {
+            ret = ret.concat(String.valueOf(abc.charAt(ran.nextInt(abc.length()))));
+          }
+          return ret;
+        }
+      
+        void startServer() throws IOException {
+          serverHack = new ServerHack(this);
+          serverThread = new Thread(serverHack);
+          serverThread.start();
+      
+          while (!ready) {
+            try {
+              Thread.sleep(100);
+            } catch (InterruptedException ignored) {
+            }
+          }
+        }
+      
+        void stopServer() throws InterruptedException {
+          serverHack.disconnect();
+          serverThread.join();
+        }
+      
+        @Override
+        public List<TestCase<String[]>> generate() {
+          try {
+            startServer();
+          } catch (IOException ignored) {
+          }
+          password = randomPassword();
+          login = randomLogin();
+          return List.of(new TestCase<String[]>()
+                  .addArguments("localhost", "9090")
+                  .setAttach(new String[]{password, login})
+                  .setTimeLimit(25000)
+          );
+        }
+      
+        public CheckResult check(String reply, Object attach) {
+          try {
+            stopServer();
+          } catch (Exception ignored) {
+          }
+          if (serverHack == null || !serverHack.connected) {
+            return CheckResult.wrong("You didn't connect to the server");
+          }
+          if (serverHack.message.size() == 0) {
+            return CheckResult.wrong("You sent nothing to the server");
+          }
+          if (reply.length() == 0 || reply.split("\n").length == 0) {
+            return CheckResult.wrong("You did not print anything");
+          }
+      
+          String[] attachStr = (String[]) attach;
+      
+          String realPassword = attachStr[0];
+          String realLogin = attachStr[1];
+      
+          JsonObject jsonReply;
+      
+          try {
+            jsonReply = new Gson().fromJson(reply, JsonObject.class);
+          } catch (Exception e) {
+            return CheckResult.wrong("The output of your program is not a valid JSON:\n" + reply);
+          }
+      
+          JsonElement passwordElement = jsonReply.get("password");
+          if (passwordElement == null) {
+            return CheckResult.wrong("The output of your program did not contain the field \"password\":\n" + reply);
+          }
+          JsonElement loginElement = jsonReply.get("login");
+          if (loginElement == null) {
+            return CheckResult.wrong("The output of your program did not contain the field \"login\":\n" + reply);
+          }
+      
+          String password_ = passwordElement.getAsString();
+          String login_ = loginElement.getAsString();
+      
+          if (!login_.equals(realLogin)) {
+            return CheckResult.wrong("The login you printed is not correct");
+          }
+          if (!password_.equals(realPassword)) {
+            return CheckResult.wrong("The password you printed is not correct");
+          }
+      
+          boolean findFirstLetter = false;
+      
+          for (String i : serverHack.message) {
+            jsonReply = new Gson().fromJson(i, JsonObject.class);
+            String pas = jsonReply.get("password").getAsString();
+            String log = jsonReply.get("login").getAsString();
+            if (!findFirstLetter && pas.length() == 1 && log == realLogin && realPassword.startsWith(pas)) {
+              findFirstLetter = true;
+            }
+            if (findFirstLetter) {
+              if (!log.equals(realLogin)) {
+                return CheckResult.wrong("You should find a correct login and then use only it");
+              }
+              if (pas.charAt(0) != realPassword.charAt(0)) {
+                return CheckResult.wrong("When you find a first letter you should then start your passwords with it");
+              }
+              if (pas.length() > 1) {
+                if (!pas.substring(0, pas.length() - 1).equals(realPassword.substring(0, pas.length() - 1))) {
+                  return CheckResult.wrong(
+                          "You have already found the first " + (pas.length() - 1) + " letters of the password. Use them as a" +
+                                  " beginning"
+                  );
+                }
+              }
+            }
+          }
+          return CheckResult.correct();
+        }
+      }
+    learner_created: false
+  - name: test/ServerHack.java
+    visible: false
+    text: |
+      import com.google.gson.Gson;
+      import com.google.gson.JsonObject;
+      
+      import java.io.DataInputStream;
+      import java.io.DataOutputStream;
+      import java.io.IOException;
+      import java.net.InetAddress;
+      import java.net.ServerSocket;
+      import java.net.Socket;
+      import java.util.ArrayList;
+      import java.util.List;
+      
+      public class ServerHack implements Runnable {
+        HackingTests hacking;
+      
+        boolean stopThread = true;
+        boolean connected;
+      
+        ServerSocket server;
+        Socket socket;
+        List<String> message = new ArrayList<>();
+      
+        DataInputStream inputStream;
+        DataOutputStream outputStream;
+      
+        Gson gson;
+        JsonObject jsonObject;
+      
+        public ServerHack(HackingTests hacking) {
+          this.hacking = hacking;
+          gson = new Gson();
+          jsonObject = new JsonObject();
+        }
+      
+        @Override
+        public void run() {
+          String address = "localhost";
+          int port = 9090;
+          try {
+            server = new ServerSocket(port, 50, InetAddress.getByName(address));
+          } catch (IOException ignored) {
+          }
+          hacking.ready = true;
+          try {
+            socket = server.accept();
+            connected = true;
+            socket.setSoTimeout(16000);
+      
+            inputStream = new DataInputStream(socket.getInputStream());
+            outputStream = new DataOutputStream(socket.getOutputStream());
+            while (stopThread) {
+              String msg = inputStream.readUTF();
+              message.add(msg);
+              if (message.size() > 1_000_000) {
+                jsonObject.addProperty("result", "Too many attempts");
+                outputStream.writeUTF(gson.toJson(jsonObject));
+                break;
+              }
+              String login_, password_;
+      
+              try {
+                JsonObject json = new Gson().fromJson(msg, JsonObject.class);
+                login_ = json.get("login").getAsString();
+                password_ = json.get("password").getAsString();
+              } catch (Exception e) {
+                jsonObject.addProperty("result", "Bad request!");
+                outputStream.writeUTF(gson.toJson(jsonObject));
+                continue;
+              }
+      
+              boolean success = false;
+              if (login_.equals(hacking.login)) {
+                if (password_.equals(hacking.password)) {
+                  jsonObject.addProperty("result", "Connection success!");
+                  success = true;
+                }else{
+                  if (hacking.password.startsWith(password_) && !password_.equals("")) {
+                    jsonObject.addProperty("result", "Exception happened during login");
+                  } else {
+                    jsonObject.addProperty("result", "Wrong password!");
+                  }
+                }
+              } else {
+                jsonObject.addProperty("result", "Wrong login!");
+              }
+              outputStream.writeUTF(gson.toJson(jsonObject));
+              if (success) {
+                break;
+              }
+            }
+            disconnect();
+          } catch (IOException ignored) {
+          }
+        }
+      
+        public void disconnect() {
+          stopThread = false;
+          try {
+            inputStream.close();
+            socket.close();
+            server.close();
+          } catch (IOException ignored) {
+          }
+        }
+      }
+    learner_created: false
+feedback_link: https://hyperskill.org/learn/step/26982#comment
+status: Unchecked
+record: -1
