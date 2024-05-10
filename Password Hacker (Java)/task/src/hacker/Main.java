@@ -16,6 +16,7 @@ public class Main {
              //DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
             List<Character> passwordAttempt = new ArrayList<>();
             passwordAttempt.add('a');
+            infiniteloop:
             while (true) {
                 // Check if any part of the password needs to cycle back to "a"
                 if (passwordAttempt.get(passwordAttempt.size() - 1) == '9') {
@@ -27,6 +28,7 @@ public class Main {
                             for (int j = passwordAttempt.size() - 1; j > i; j--) {
                                 passwordAttempt.set(j, 'a');
                             }
+                            continue infiniteloop;
                         }
                     }
                     // If the loop finds none of them to be not equal to 9, then the password attempt needs to be extended
@@ -36,7 +38,7 @@ public class Main {
                     passwordAttempt.set(passwordAttempt.size() - 1, nextCharacter(passwordAttempt.get(passwordAttempt.size() - 1)));
                 }
                 System.out.println(passwordAttempt.toString());
-                Thread.sleep(100L);
+                Thread.sleep(1L);
             }
         //}
     }
