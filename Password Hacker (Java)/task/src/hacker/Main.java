@@ -9,13 +9,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class Main {
-    public static void main(String[] args) throws IOException, InterruptedException {
-        String ipAddress = args[0]; int port = Integer.parseInt(args[1]); String message = args[2];
-        //try (Socket socket = new Socket(ipAddress, port);
-             //DataInputStream input = new DataInputStream(socket.getInputStream());
-             //DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
+    public static void main(String[] args) throws IOException {
+        String ipAddress = args[0]; int port = Integer.parseInt(args[1]);
+        try (Socket socket = new Socket(ipAddress, port);
+             DataInputStream input = new DataInputStream(socket.getInputStream());
+             DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
             List<Character> passwordAttempt = new ArrayList<>();
-            passwordAttempt.add('a');
+            passwordAttempt.add('`');
             infiniteloop:
             while (true) {
                 // Check if any part of the password needs to cycle back to "a"
@@ -37,10 +37,14 @@ public class Main {
                 } else {
                     passwordAttempt.set(passwordAttempt.size() - 1, nextCharacter(passwordAttempt.get(passwordAttempt.size() - 1)));
                 }
-                System.out.println(passwordAttempt.toString());
-                Thread.sleep(1L);
+                String sentPassword = joinList(passwordAttempt);
+                output.writeUTF(sentPassword);
+                if ("Connection success!".equals(input.readUTF())) {
+                    System.out.println(sentPassword);
+                    break;
+                }
             }
-        //}
+        }
     }
 
     /**
@@ -48,10 +52,21 @@ public class Main {
      * @param previousCharacter the previous character which is being changed
      * @return the next character to be checked
      */
-    public static char nextCharacter(char previousCharacter) {
+    private static char nextCharacter(char previousCharacter) {
         if (previousCharacter == 'z') {
             return '0';
         }
         return (char) (previousCharacter + 1);
+    }
+
+    /**
+     * Takes a char array and returns a string containing the contents of the array in the same order.
+     * @param array the char array to be joined
+     * @return the joined array
+     */
+    private static <T> String joinList(List<T> array) {
+        StringBuilder sentPassword = new StringBuilder();
+        array.forEach(x -> sentPassword.append(x.toString()));
+        return sentPassword.toString();
     }
 }
