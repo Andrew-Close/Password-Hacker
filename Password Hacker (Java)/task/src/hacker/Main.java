@@ -15,6 +15,8 @@ public class Main {
              DataInputStream input = new DataInputStream(socket.getInputStream());
              DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
             List<Character> passwordAttempt = new ArrayList<>();
+            // The initial character is ` because its ascii code is right behind the ascii code of "a". This way, it gets changed to "a" in the first iteration of the algorithm instead of "a" getting skipped over
+
             passwordAttempt.add('`');
             infiniteloop:
             while (true) {
@@ -37,6 +39,7 @@ public class Main {
                 } else {
                     passwordAttempt.set(passwordAttempt.size() - 1, nextCharacter(passwordAttempt.get(passwordAttempt.size() - 1)));
                 }
+                // Password to be checked
                 String sentPassword = joinList(passwordAttempt);
                 output.writeUTF(sentPassword);
                 if ("Connection success!".equals(input.readUTF())) {
