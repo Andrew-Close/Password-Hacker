@@ -3,34 +3,9 @@ import org.hyperskill.hstest.testcase.CheckResult;
 import org.hyperskill.hstest.testcase.TestCase;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
-import java.util.stream.Stream;
 
-class PasswordGenerator implements Iterator<String> {
-  private final String abc = "abcdefghijklmnopqrstuvwxyz1234567890";
-  private int index = 1;
-  private Iterator<String> currentIterator;
-
-  @Override
-  public boolean hasNext() {
-    if (currentIterator == null || !currentIterator.hasNext()) {
-      Stream<String> stream = Stream.of("");
-      for (int i = 0; i < index; i++) {
-        stream = stream.flatMap(s -> abc.chars().mapToObj(c -> s + (char) c));
-      }
-      currentIterator = stream.iterator();
-      index++;
-    }
-    return true;
-  }
-
-  @Override
-  public String next() {
-    return currentIterator.next();
-  }
-}
 
 public class HackingTests extends StageTest {
 
@@ -40,14 +15,27 @@ public class HackingTests extends StageTest {
   String password = null;
 
   String randomPassword() {
-    String abc = "abcdefghijklmnopqrstuvwxyz1234567890";
+    String[] passwords = new String[]{
+            "chance", "frankie", "killer", "forest", "penguin",
+            "jackson", "rangers", "monica", "qweasdzxc", "explorer",
+            "gabriel", "chelsea", "simpsons", "duncan", "valentin",
+            "classic", "titanic", "logitech", "fantasy", "scotland",
+            "pamela", "christin", "birdie", "benjamin", "jonathan",
+            "knight", "morgan", "melissa", "darkness", "cassie"
+    };
+
     Random ran = new Random();
-    int length = ran.nextInt(2) + 2;
-    String ret = "";
-    for (int i = 0; i < length; i++) {
-      ret = ret.concat(String.valueOf(abc.charAt(ran.nextInt(abc.length()))));
+    String pass = passwords[ran.nextInt(passwords.length)];
+
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < pass.length(); i++) {
+      char c = pass.charAt(i);
+      if (ran.nextInt(2) == 1) {
+        c = Character.toUpperCase(c);
+      }
+      sb.append(c);
     }
-    return ret;
+    return sb.toString();
   }
 
   void startServer() throws IOException {
@@ -97,27 +85,11 @@ public class HackingTests extends StageTest {
       return CheckResult.wrong("You did not print anything");
     }
     String realPassword = attach.toString();
-    if (!reply.split("\n")[0].equals(realPassword)) {
-      return CheckResult.wrong("The password you printed is not correct. The password is \"" + realPassword + "\"");
+    String printedPassword = reply.split("\n")[0];
+    if (!printedPassword.equals(realPassword)) {
+      return CheckResult.wrong("You printed: \"" + printedPassword + "\".\n" +
+              "Correct password: \"" + realPassword + "\"");
     }
-
-    boolean success = true;
-    PasswordGenerator generator = new PasswordGenerator();
-    String pass = "";
-    while (generator.hasNext()) {
-      pass = generator.next();
-      if (pass.length() == realPassword.length()) {
-        break;
-      }
-      if (!serverHack.message.remove(pass)) {
-        success = false;
-        break;
-      }
-    }
-
-    if (success) {
-      return CheckResult.correct();
-    }
-    return CheckResult.wrong("Your generator algorithm does not include all the variants: " + pass);
+    return CheckResult.correct();
   }
 }

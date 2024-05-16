@@ -185,6 +185,12 @@ files:
         }
       }
     learner_created: false
+  - name: src/hacker/passwords.txt
+    visible: true
+    learner_created: true
+  - name: src/hacker/BinaryFilter.java
+    visible: true
+    learner_created: true
 feedback_link: https://hyperskill.org/learn/step/26981#comment
 status: Unchecked
 record: 3

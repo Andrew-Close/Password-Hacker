@@ -49,6 +49,7 @@ public class ServerHack implements Runnable {
         }
         if(msg.equals(hacking.password)){
           outputStream.writeUTF("Connection success!");
+          break;
         }else{
           outputStream.writeUTF("Wrong password!");
         }
