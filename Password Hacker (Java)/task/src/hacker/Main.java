@@ -17,20 +17,21 @@ public class Main {
         //}
     }
 
-    private static String bruteForceUsingDictionary() throws IOException {
+    private static String bruteForceUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
+            // Holds the current password being checked from passwords.txt
             StringBuilder commonPasswordBuilder = new StringBuilder();
             // Holds each char that is read, used in the while loop
             int i;
             while ((i = reader.read()) != -1) {
+                // Current character being read
                 char currentCharacter = (char) i;
                 // Checking for whitespace/linebreak
                 if (Character.toString(currentCharacter).matches("\\s")) {
                     String commonPassword = commonPasswordBuilder.toString();
-                    System.out.println(commonPassword.toLowerCase());
-                    StringBuilder commonPasswordVariableCase = new StringBuilder();
-                    while ()
+                    tryAllCaseCombinations(commonPassword);
                     commonPasswordBuilder = new StringBuilder();
+                    // REMOVE THIS LATER
                 } else {
                     commonPasswordBuilder.append(currentCharacter);
                 }
@@ -38,6 +39,30 @@ public class Main {
         }
         // PLACEHOLDER
         return null;
+    }
+
+    private static void tryAllCaseCombinations(DataInputStream input, DataOutputStream output, String commonPassword) {
+        if (commonPassword.matches("[0-9]+")) {
+            System.out.println(commonPassword);
+        } else {
+            System.out.println(commonPassword.toLowerCase());
+            BinaryFilter filter = new BinaryFilter(commonPassword.length());
+            // StringBuilder used for varying the case
+            StringBuilder commonPasswordVariableCase = new StringBuilder();
+            while (filter.incrementFilter()) {
+                for (int j = 0; j < filter.getLength(); j++) {
+                    // String representation of the filter, only the part past the first 1
+                    String stringFilter = filter.getFilter();
+                    if (stringFilter.charAt(j) == '0') {
+                        commonPasswordVariableCase.append(String.valueOf(commonPassword.charAt(j)).toLowerCase());
+                    } else {
+                        commonPasswordVariableCase.append(String.valueOf(commonPassword.charAt(j)).toUpperCase());
+                    }
+                }
+                System.out.println(commonPasswordVariableCase);
+                commonPasswordVariableCase = new StringBuilder();
+            }
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package hacker;
 
+import javax.swing.*;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -68,7 +69,15 @@ public class BinaryFilter implements Iterable<Character> {
 
 
     public void printFilter() {
-        System.out.println(Integer.toBinaryString(this.filter).substring(1));
+        System.out.println(this.getFilter());
+    }
+
+    public String getFilter() {
+        return Integer.toBinaryString(this.filter).substring(1);
+    }
+
+    public int getLength() {
+        return length;
     }
 
     @Override
