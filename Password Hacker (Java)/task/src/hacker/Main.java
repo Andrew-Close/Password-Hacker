@@ -19,18 +19,20 @@ public class Main {
 
     private static String bruteForceUsingDictionary() throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
+            StringBuilder commonPasswordBuilder = new StringBuilder();
             // Holds each char that is read, used in the while loop
-            StringBuilder commonPassword = new StringBuilder();
             int i;
             while ((i = reader.read()) != -1) {
                 char currentCharacter = (char) i;
                 // Checking for whitespace/linebreak
                 if (Character.toString(currentCharacter).matches("\\s")) {
-                    BinaryFilter filter = new BinaryFilter(commonPassword.length());
-                    filter.forEach(System.out::println);
-                    commonPassword = new StringBuilder();
+                    String commonPassword = commonPasswordBuilder.toString();
+                    System.out.println(commonPassword.toLowerCase());
+                    StringBuilder commonPasswordVariableCase = new StringBuilder();
+                    while ()
+                    commonPasswordBuilder = new StringBuilder();
                 } else {
-                    commonPassword.append(currentCharacter);
+                    commonPasswordBuilder.append(currentCharacter);
                 }
             }
         }

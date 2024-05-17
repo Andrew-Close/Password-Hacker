@@ -1,16 +1,13 @@
 package hacker;
 
-import javax.management.StandardEmitterMBean;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Spliterator;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
  * This object holds a binary number which can be used to control algorithms, depending on the number. If the filter is 010, then the
  * algorithm will do the false case the first and third times, but will do the true case the second time.
  */
-public class BinaryFilter implements Iterable {
+public class BinaryFilter implements Iterable<Character> {
     // The actual binary filter
     int filter;
     // The length of the filter. Should not go above this length when incrementing
@@ -75,19 +72,21 @@ public class BinaryFilter implements Iterable {
     }
 
     @Override
-    public Iterator iterator() {
-        return List.of(Integer.toBinaryString(this.filter)
-                .substring(1)
-                .toCharArray()).iterator();
+    public Iterator<Character> iterator() {
+        List<Character> filterList = new ArrayList<>();
+        for (char bit : Integer.toBinaryString(this.filter).substring(1).toCharArray()) {
+            filterList.add(bit);
+        }
+        return filterList.iterator();
     }
 
     @Override
     public void forEach(Consumer action) {
-        Iterable.super.forEach(action);
-    }
+        Objects.requireNonNull(action);
 
-    @Override
-    public Spliterator spliterator() {
-        return Iterable.super.spliterator();
+        for (char temp : this) {
+            boolean t = temp == '1';
+            action.accept(t);
+        }
     }
 }
