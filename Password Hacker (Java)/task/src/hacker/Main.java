@@ -54,6 +54,7 @@ public class Main {
                         }
                     }
                     commonPasswordBuilder = new StringBuilder();
+                    // REMOVE THIS LATER
                 } else {
                     commonPasswordBuilder.append(currentCharacter);
                 }
