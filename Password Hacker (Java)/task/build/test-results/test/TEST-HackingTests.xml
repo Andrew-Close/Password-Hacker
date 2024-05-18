@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="HackingTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2024-05-13T00:57:22" hostname="ACLOSECUSTOMPC" time="0.316">
+<testsuite name="HackingTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2024-05-18T00:45:39" hostname="ACLOSECUSTOMPC" time="2.722">
   <properties/>
-  <testcase name="start" classname="HackingTests" time="0.316"/>
+  <testcase name="start" classname="HackingTests" time="2.722"/>
   <system-out><![CDATA[?[1;31m
 Start test 1?[0m
-4v
+BirdIE
 ]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

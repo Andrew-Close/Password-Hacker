@@ -4,20 +4,30 @@ import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Main {
+    // Normal directory: Password Hacker (Java)\task\src\hacker\passwords.txt
+    // When testing: src\hacker\passwords.txt
     private static final String PASSWORDS_DIRECTORY = "Password Hacker (Java)\\task\\src\\hacker\\passwords.txt";
     public static void main(String[] args) throws IOException {
-        //String ipAddress = args[0]; int port = Integer.parseInt(args[1]);
-        //try (Socket socket = new Socket(ipAddress, port);
-             //DataInputStream input = new DataInputStream(socket.getInputStream());
-             //DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
-        System.out.println(bruteForceUsingDictionary());
-        //}
+        String ipAddress = args[0]; int port = Integer.parseInt(args[1]);
+        try (Socket socket = new Socket(ipAddress, port);
+             DataInputStream input = new DataInputStream(socket.getInputStream());
+             DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
+            System.out.println(bruteForceUsingDictionary(input, output).orElse("Password not found."));
+        }
     }
 
-    private static String bruteForceUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
+    /**
+     * Brute forces the password using the provided dictionary of passwords in passwords.txt. Also tries all possible combinations of cases of each password.
+     * @param input the input stream to which to respond if the password was correct or not
+     * @param output the output stream to which to send the attempted password
+     * @return either an empty Optional or an Optional containing the correct password
+     * @throws IOException if something goes wrong with the input/output of data
+     */
+    private static Optional<String> bruteForceUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
             // Holds the current password being checked from passwords.txt
             StringBuilder commonPasswordBuilder = new StringBuilder();
@@ -29,40 +39,45 @@ public class Main {
                 // Checking for whitespace/linebreak
                 if (Character.toString(currentCharacter).matches("\\s")) {
                     String commonPassword = commonPasswordBuilder.toString();
-                    tryAllCaseCombinations(commonPassword);
+                    // Doesn't need to try case combinations if the password is a number
+                    if (commonPassword.matches("[0-9]+")) {
+                        output.writeUTF(commonPassword);
+                        if ("Connection success!".equals(input.readUTF())) {
+                            return Optional.of(commonPassword);
+                        }
+                    } else {
+                        BinaryFilter filter = new BinaryFilter(commonPassword.length());
+                        String[] allCaseCombinations = filter.modifyStringAllCombinations(commonPassword, Character::toUpperCase);
+                        Optional<String> possibleCorrectPassword = tryArrayOfPasswords(allCaseCombinations, input, output);
+                        if (possibleCorrectPassword.isPresent()) {
+                            return possibleCorrectPassword;
+                        }
+                    }
                     commonPasswordBuilder = new StringBuilder();
-                    // REMOVE THIS LATER
                 } else {
                     commonPasswordBuilder.append(currentCharacter);
                 }
             }
         }
-        // PLACEHOLDER
-        return null;
+        return Optional.empty();
     }
 
-    private static void tryAllCaseCombinations(DataInputStream input, DataOutputStream output, String commonPassword) {
-        if (commonPassword.matches("[0-9]+")) {
-            System.out.println(commonPassword);
-        } else {
-            System.out.println(commonPassword.toLowerCase());
-            BinaryFilter filter = new BinaryFilter(commonPassword.length());
-            // StringBuilder used for varying the case
-            StringBuilder commonPasswordVariableCase = new StringBuilder();
-            while (filter.incrementFilter()) {
-                for (int j = 0; j < filter.getLength(); j++) {
-                    // String representation of the filter, only the part past the first 1
-                    String stringFilter = filter.getFilter();
-                    if (stringFilter.charAt(j) == '0') {
-                        commonPasswordVariableCase.append(String.valueOf(commonPassword.charAt(j)).toLowerCase());
-                    } else {
-                        commonPasswordVariableCase.append(String.valueOf(commonPassword.charAt(j)).toUpperCase());
-                    }
-                }
-                System.out.println(commonPasswordVariableCase);
-                commonPasswordVariableCase = new StringBuilder();
+    /**
+     * Takes a string array of passwords and sends each password to the provided output stream, testing if it is correct.
+     * @param passwords the string array of passwords to be tested
+     * @param input the input stream to which to respond if the password was correct or not
+     * @param output the output stream to which to send the attempted password
+     * @return either an empty Optional or an Optional containing the correct password
+     * @throws IOException if something goes wrong with the input/output of data
+     */
+    private static Optional<String> tryArrayOfPasswords(String[] passwords, DataInputStream input, DataOutputStream output) throws IOException {
+        for (String password : passwords) {
+            output.writeUTF(password);
+            if ("Connection success!".equals(input.readUTF())) {
+                return Optional.of(password);
             }
         }
+        return Optional.empty();
     }
 
     /**
@@ -72,6 +87,7 @@ public class Main {
      * @return the correct password once it is found
      * @throws IOException if something goes wrong with the input/output of data
      */
+    @Deprecated
     private static String bruteForce(DataInputStream input, DataOutputStream output) throws IOException {
         List<Character> passwordAttempt = new ArrayList<>();
         passwordAttempt.add('`');
@@ -109,6 +125,7 @@ public class Main {
      * @param previousCharacter the previous character which is being changed
      * @return the next character to be checked
      */
+    @Deprecated
     private static char nextCharacter(char previousCharacter) {
         if (previousCharacter == 'z') {
             return '0';
@@ -121,6 +138,7 @@ public class Main {
      * @param array the char list to be joined
      * @return the joined list
      */
+    @Deprecated
     private static <T> String joinList(List<T> array) {
         StringBuilder sentPassword = new StringBuilder();
         array.forEach(x -> sentPassword.append(x.toString()));
