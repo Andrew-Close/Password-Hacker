@@ -1,3 +1,6 @@
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.hyperskill.hstest.stage.StageTest;
 import org.hyperskill.hstest.testcase.CheckResult;
 import org.hyperskill.hstest.testcase.TestCase;
@@ -8,34 +11,34 @@ import java.util.Random;
 
 
 public class HackingTests extends StageTest {
-
+  String abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
   boolean ready = false;
   ServerHack serverHack = null;
   Thread serverThread = null;
   String password = null;
+  String login = null;
+
+  String randomLogin() {
+    String[] logins = new String[]{
+            "admin", "Admin", "admin1", "admin2", "admin3",
+            "user1", "user2", "root", "default", "new_user",
+            "some_user", "new_admin", "administrator",
+            "Administrator", "superuser", "super", "su", "alex",
+            "suser", "rootuser", "adminadmin", "useruser",
+            "superadmin", "username", "username1"
+    };
+    Random ran = new Random();
+    return logins[ran.nextInt(logins.length)];
+  }
 
   String randomPassword() {
-    String[] passwords = new String[]{
-            "chance", "frankie", "killer", "forest", "penguin",
-            "jackson", "rangers", "monica", "qweasdzxc", "explorer",
-            "gabriel", "chelsea", "simpsons", "duncan", "valentin",
-            "classic", "titanic", "logitech", "fantasy", "scotland",
-            "pamela", "christin", "birdie", "benjamin", "jonathan",
-            "knight", "morgan", "melissa", "darkness", "cassie"
-    };
-
     Random ran = new Random();
-    String pass = passwords[ran.nextInt(passwords.length)];
-
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < pass.length(); i++) {
-      char c = pass.charAt(i);
-      if (ran.nextInt(2) == 1) {
-        c = Character.toUpperCase(c);
-      }
-      sb.append(c);
+    int length = ran.nextInt(5) + 6;
+    String ret = "";
+    for (int i = 0; i < length; i++) {
+      ret = ret.concat(String.valueOf(abc.charAt(ran.nextInt(abc.length()))));
     }
-    return sb.toString();
+    return ret;
   }
 
   void startServer() throws IOException {
@@ -57,15 +60,16 @@ public class HackingTests extends StageTest {
   }
 
   @Override
-  public List<TestCase<String>> generate() {
+  public List<TestCase<String[]>> generate() {
     try {
       startServer();
     } catch (IOException ignored) {
     }
     password = randomPassword();
-    return List.of(new TestCase<String>()
+    login = randomLogin();
+    return List.of(new TestCase<String[]>()
             .addArguments("localhost", "9090")
-            .setAttach(password)
+            .setAttach(new String[]{password, login})
             .setTimeLimit(25000)
     );
   }
@@ -84,11 +88,64 @@ public class HackingTests extends StageTest {
     if (reply.length() == 0 || reply.split("\n").length == 0) {
       return CheckResult.wrong("You did not print anything");
     }
-    String realPassword = attach.toString();
-    String printedPassword = reply.split("\n")[0];
-    if (!printedPassword.equals(realPassword)) {
-      return CheckResult.wrong("You printed: \"" + printedPassword + "\".\n" +
-              "Correct password: \"" + realPassword + "\"");
+
+    String[] attachStr = (String[]) attach;
+
+    String realPassword = attachStr[0];
+    String realLogin = attachStr[1];
+
+    JsonObject jsonReply;
+
+    try {
+      jsonReply = new Gson().fromJson(reply, JsonObject.class);
+    } catch (Exception e) {
+      return CheckResult.wrong("The output of your program is not a valid JSON:\n" + reply);
+    }
+
+    JsonElement passwordElement = jsonReply.get("password");
+    if (passwordElement == null) {
+      return CheckResult.wrong("The output of your program did not contain the field \"password\":\n" + reply);
+    }
+    JsonElement loginElement = jsonReply.get("login");
+    if (loginElement == null) {
+      return CheckResult.wrong("The output of your program did not contain the field \"login\":\n" + reply);
+    }
+
+    String password_ = passwordElement.getAsString();
+    String login_ = loginElement.getAsString();
+
+    if (!login_.equals(realLogin)) {
+      return CheckResult.wrong("The login you printed is not correct");
+    }
+    if (!password_.equals(realPassword)) {
+      return CheckResult.wrong("The password you printed is not correct");
+    }
+
+    boolean findFirstLetter = false;
+
+    for (String i : serverHack.message) {
+      jsonReply = new Gson().fromJson(i, JsonObject.class);
+      String pas = jsonReply.get("password").getAsString();
+      String log = jsonReply.get("login").getAsString();
+      if (!findFirstLetter && pas.length() == 1 && log == realLogin && realPassword.startsWith(pas)) {
+        findFirstLetter = true;
+      }
+      if (findFirstLetter) {
+        if (!log.equals(realLogin)) {
+          return CheckResult.wrong("You should find a correct login and then use only it");
+        }
+        if (pas.charAt(0) != realPassword.charAt(0)) {
+          return CheckResult.wrong("When you find a first letter you should then start your passwords with it");
+        }
+        if (pas.length() > 1) {
+          if (!pas.substring(0, pas.length() - 1).equals(realPassword.substring(0, pas.length() - 1))) {
+            return CheckResult.wrong(
+                    "You have already found the first " + (pas.length() - 1) + " letters of the password. Use them as a" +
+                            " beginning"
+            );
+          }
+        }
+      }
     }
     return CheckResult.correct();
   }

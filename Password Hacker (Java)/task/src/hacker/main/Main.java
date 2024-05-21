@@ -1,4 +1,8 @@
-package hacker;
+package hacker.main;
+
+import com.google.gson.Gson;
+import hacker.json.LoginPasswordPair;
+import hacker.json.ServerResponse;
 
 import java.io.*;
 import java.net.Socket;
@@ -7,17 +11,67 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static hacker.data.Config.LOGINS_DIRECTORY;
+import static hacker.data.Config.PASSWORDS_DIRECTORY;
+import static hacker.main.Main.Responses.SUCCESS;
+
 public class Main {
-    // Normal directory: Password Hacker (Java)\task\src\hacker\passwords.txt
-    // When testing: src\hacker\passwords.txt
-    private static final String PASSWORDS_DIRECTORY = "Password Hacker (Java)\\task\\src\\hacker\\passwords.txt";
+     enum Responses {
+        WRONG_LOGIN("Wrong login!"), WRONG_PASSWORD("Wrong password!"), BAD("Bad request!"), EXCEPTION("Exception happened during login"), SUCCESS("Connection success!");
+
+        private final String message;
+            
+        Responses(String message) {
+            this.message = message;
+        }
+
+        private String getMessage() {
+            return message;
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         String ipAddress = args[0]; int port = Integer.parseInt(args[1]);
         try (Socket socket = new Socket(ipAddress, port);
              DataInputStream input = new DataInputStream(socket.getInputStream());
              DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
-            System.out.println(bruteForceUsingDictionary(input, output).orElse("Password not found."));
+            System.out.println(bruteForcePasswordUsingDictionary("admin", input, output).orElse("Password not found."));
         }
+    }
+
+    private static Optional<String> bruteForceLoginUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
+        try (Reader reader = new FileReader(LOGINS_DIRECTORY)) {
+            // Holds the current password being checked from passwords.txt
+            StringBuilder commonLoginBuilder = new StringBuilder();
+            // Holds each char that is read, used in the while loop
+            int i;
+            while ((i = reader.read()) != -1) {
+                // Current character being read
+                char currentCharacter = (char) i;
+                // Checking for whitespace/linebreak
+                if (Character.toString(currentCharacter).matches("\\s")) {
+                    String commonLogin = commonLoginBuilder.toString();
+                    // Doesn't need to try case combinations if the password is a number
+                    if (commonLogin.matches("[0-9]+")) {
+                        output.writeUTF(commonLogin);
+                        if (SUCCESS.getMessage().equals(input.readUTF())) {
+                            return Optional.of(commonLogin);
+                        }
+                    } else {
+                        BinaryFilter filter = new BinaryFilter(commonLogin.length());
+                        String[] allCaseCombinations = filter.modifyStringAllCombinations(commonLogin, Character::toUpperCase);
+                        Optional<String> possibleCorrectLogin = tryArrayOfPasswords("admin", allCaseCombinations, input, output);
+                        if (possibleCorrectLogin.isPresent()) {
+                            return possibleCorrectLogin;
+                        }
+                    }
+                    commonLoginBuilder = new StringBuilder();
+                } else {
+                    commonLoginBuilder.append(currentCharacter);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -27,7 +81,7 @@ public class Main {
      * @return either an empty Optional or an Optional containing the correct password
      * @throws IOException if something goes wrong with the input/output of data
      */
-    private static Optional<String> bruteForceUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
+    private static Optional<String> bruteForcePasswordUsingDictionary(String login, DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
             // Holds the current password being checked from passwords.txt
             StringBuilder commonPasswordBuilder = new StringBuilder();
@@ -42,13 +96,13 @@ public class Main {
                     // Doesn't need to try case combinations if the password is a number
                     if (commonPassword.matches("[0-9]+")) {
                         output.writeUTF(commonPassword);
-                        if ("Connection success!".equals(input.readUTF())) {
+                        if (SUCCESS.getMessage().equals(input.readUTF())) {
                             return Optional.of(commonPassword);
                         }
                     } else {
                         BinaryFilter filter = new BinaryFilter(commonPassword.length());
                         String[] allCaseCombinations = filter.modifyStringAllCombinations(commonPassword, Character::toUpperCase);
-                        Optional<String> possibleCorrectPassword = tryArrayOfPasswords(allCaseCombinations, input, output);
+                        Optional<String> possibleCorrectPassword = tryArrayOfPasswords(login, allCaseCombinations, input, output);
                         if (possibleCorrectPassword.isPresent()) {
                             return possibleCorrectPassword;
                         }
@@ -64,6 +118,21 @@ public class Main {
     }
 
     /**
+     * Takes a login password pair object and sends it to the sever.
+     * @param pair the pair object to be sent
+     * @param input the input stream to which to respond if the pair was correct or not
+     * @param output the output stream to which to send the attempted pair
+     * @return the response from the server
+     * @throws IOException if something goes wrong with the input/output of data
+     */
+    private static ServerResponse tryLoginPasswordPair(LoginPasswordPair pair, DataInputStream input, DataOutputStream output) throws IOException {
+        Gson gson = new Gson();
+        String json = gson.toJson(pair, LoginPasswordPair.class);
+        output.writeUTF(json);
+        return gson.fromJson(input.readUTF(), ServerResponse.class);
+    }
+
+    /**
      * Takes a string array of passwords and sends each password to the provided output stream, testing if it is correct.
      * @param passwords the string array of passwords to be tested
      * @param input the input stream to which to respond if the password was correct or not
@@ -71,10 +140,12 @@ public class Main {
      * @return either an empty Optional or an Optional containing the correct password
      * @throws IOException if something goes wrong with the input/output of data
      */
-    private static Optional<String> tryArrayOfPasswords(String[] passwords, DataInputStream input, DataOutputStream output) throws IOException {
+    private static Optional<String> tryArrayOfPasswords(String login, String[] passwords, DataInputStream input, DataOutputStream output) throws IOException {
         for (String password : passwords) {
-            output.writeUTF(password);
-            if ("Connection success!".equals(input.readUTF())) {
+            Gson gson = new Gson();
+            String json = gson.toJson(new LoginPasswordPair(login, password), LoginPasswordPair.class);
+            output.writeUTF(json);
+            if (SUCCESS.getMessage().equals(input.readUTF())) {
                 return Optional.of(password);
             }
         }
@@ -115,7 +186,7 @@ public class Main {
             }
             String sentPassword = joinList(passwordAttempt);
             output.writeUTF(sentPassword);
-            if ("Connection success!".equals(input.readUTF())) {
+            if (SUCCESS.getMessage().equals(input.readUTF())) {
                 return sentPassword;
             }
         }

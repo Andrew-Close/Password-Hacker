@@ -1,4 +1,4 @@
-package hacker;
+package hacker.main;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +11,9 @@ import java.util.function.UnaryOperator;
  */
 public class BinaryFilter {
     // The actual binary filter
-    int filter;
+    private int filter;
     // The length of the filter. Should not go above this length when incrementing
-    int length;
+    private final int length;
 
     public BinaryFilter(int length) {
         int temp = 0b1;
