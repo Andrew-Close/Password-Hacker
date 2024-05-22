@@ -4,9 +4,12 @@ import com.google.gson.Gson;
 import hacker.json.LoginPasswordPair;
 import hacker.json.ServerResponse;
 
+import javax.lang.model.type.NullType;
+import javax.management.modelmbean.XMLParseException;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -14,6 +17,7 @@ import java.util.stream.Collectors;
 import static hacker.data.Config.LOGINS_DIRECTORY;
 import static hacker.data.Config.PASSWORDS_DIRECTORY;
 import static hacker.main.Main.Responses.SUCCESS;
+import static hacker.main.Main.Responses.WRONG_PASSWORD;
 
 public class Main {
      enum Responses {
@@ -54,13 +58,14 @@ public class Main {
                     // Doesn't need to try case combinations if the password is a number
                     if (commonLogin.matches("[0-9]+")) {
                         output.writeUTF(commonLogin);
-                        if (SUCCESS.getMessage().equals(input.readUTF())) {
+                        // When is says wrong password, that means the login is correct
+                        if (WRONG_PASSWORD.getMessage().equals(input.readUTF())) {
                             return Optional.of(commonLogin);
                         }
                     } else {
                         BinaryFilter filter = new BinaryFilter(commonLogin.length());
-                        String[] allCaseCombinations = filter.modifyStringAllCombinations(commonLogin, Character::toUpperCase);
-                        Optional<String> possibleCorrectLogin = tryArrayOfPasswords("admin", allCaseCombinations, input, output);
+                        List<LoginPasswordPair> allCaseCombinations = Arrays.stream(filter.modifyStringAllCombinations(commonLogin, Character::toUpperCase)).map(x -> new LoginPasswordPair(x, "a")).collect(Collectors.toList());
+                        Optional<String> possibleCorrectLogin = tryListOfLoginPasswordPairs(new LoginPasswordPair[], input, output);
                         if (possibleCorrectLogin.isPresent()) {
                             return possibleCorrectLogin;
                         }
@@ -130,6 +135,24 @@ public class Main {
         String json = gson.toJson(pair, LoginPasswordPair.class);
         output.writeUTF(json);
         return gson.fromJson(input.readUTF(), ServerResponse.class);
+    }
+
+    private static String tryListOfLoginPasswordPairs(List<LoginPasswordPair> pairs, boolean findingLogin, DataInputStream input, DataOutputStream output) throws IOException {
+        Gson gson = new Gson();
+        for (LoginPasswordPair pair : pairs) {
+            String json = gson.toJson(pair, LoginPasswordPair.class);
+            output.writeUTF(json);
+            String response = gson.fromJson(input.readUTF(), ServerResponse.class).getResult();
+            if (findingLogin) {
+                if (response.equals(WRONG_PASSWORD)) {
+                    return pair.getLogin();
+                } else {
+                    if (response.equals(SUCCESS)) {
+                        return pair.getPassword();
+                    }
+                }
+            }
+        }
     }
 
     /**

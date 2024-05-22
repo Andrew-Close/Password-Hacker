@@ -9,4 +9,8 @@ public class ServerResponse {
     public ServerResponse(String result) {
         this.result = result;
     }
+
+    public String getResult() {
+        return result;
+    }
 }
