@@ -16,8 +16,4 @@ public class LoginPasswordPair {
     public String getLogin() {
         return login;
     }
-
-    public String getPassword() {
-        return password;
-    }
 }

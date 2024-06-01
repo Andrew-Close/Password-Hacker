@@ -43,15 +43,15 @@ public class ServerHack implements Runnable {
     hacking.ready = true;
     try {
       socket = server.accept();
-      connected = true;
       socket.setSoTimeout(16000);
+      connected = true;
 
       inputStream = new DataInputStream(socket.getInputStream());
       outputStream = new DataOutputStream(socket.getOutputStream());
       while (stopThread) {
         String msg = inputStream.readUTF();
         message.add(msg);
-        if (message.size() > 1_000_000) {
+        if (message.size() > 100_000_000) {
           jsonObject.addProperty("result", "Too many attempts");
           outputStream.writeUTF(gson.toJson(jsonObject));
           break;
@@ -74,11 +74,13 @@ public class ServerHack implements Runnable {
             jsonObject.addProperty("result", "Connection success!");
             success = true;
           }else{
-            if (hacking.password.startsWith(password_) && !password_.equals("")) {
-              jsonObject.addProperty("result", "Exception happened during login");
-            } else {
-              jsonObject.addProperty("result", "Wrong password!");
+            if (hacking.password.startsWith(password_)) {
+              try {
+                Thread.sleep(100);
+              } catch (InterruptedException ignored) {
+              }
             }
+            jsonObject.addProperty("result", "Wrong password!");
           }
         } else {
           jsonObject.addProperty("result", "Wrong login!");
